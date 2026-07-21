@@ -3,9 +3,8 @@ const express = require('express')
 const cors = require('cors')
 const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const { initializeApp, cert } = require("firebase-admin");
-const { getAuth } = require('firebase-admin/auth');
-const jwt = require('jsonwebtoken')
+const {initializeApp , cert} = require("firebase-admin");
+const admin = require("firebase-admin");
 const port = process.env.PORT || 4000;
 
 // product_db
@@ -14,31 +13,15 @@ const port = process.env.PORT || 4000;
 app.use(cors())
 app.use(express.json())
 
+
 const serviceAccount = require("./smart-deals-client-v1.json");
-initializeApp({
-    credential: cert(serviceAccount)
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
 });
 
-const verifyAuthintication = async (req, res, next) => {
-    // console.log(req.headers)
-    const authorization = req.headers.authorization;
-    if (!authorization) {
-        return res.status(401).send({ message: "unauthorization access" })
-    }
-    const token = authorization.split(" ")[1]
 
-    try {
-        const decode = await getAuth().verifyIdToken(token)
-        req.decode = decode;
-        // console.log(decode);
-        next()
-    }
-    catch {
-        return res.status(401).send({ message: "unauthorization access" })
-    }
-}
-
-const verifyJwtToken = async (req, res, next) => {
+const verifyFirebaseToken = (req, res, next) => {
     const authorization = req.headers.authorization;
     if (!authorization) {
         return res.status(401).send({ message: "unauthorized access" })
@@ -47,13 +30,8 @@ const verifyJwtToken = async (req, res, next) => {
     if (!token) {
         return res.status(401).send({ message: "unauthorized access" })
     }
-    jwt.verify(token, process.env.SECRATE_KEY, (err, decoded) => {
-        if (err) {
-            return res.status(401).send({ message: "unauthorized access" })
-        }
-        req.token_email = decoded.email;
-        next()
-    })
+    next()
+
 }
 
 const uri = `mongodb+srv://${process.env.USER_ID}:${process.env.USER_PASS}@cluster0.b6s1ev2.mongodb.net/?appName=Cluster0`;
@@ -98,22 +76,24 @@ async function run() {
         })
         // Make Product api data
         app.post('/product', async (req, res) => {
+            console.log("after usering authorizetion", req.headers)
             const newProduct = req.body;
             newProduct.created_at = new Date();
-            // console.log('new product info ', newProduct)
             const result = await productColl.insertOne(newProduct)
             res.send(result)
         })
 
         // Only authoriz user can access 
-        app.get('/verify_product', verifyAuthintication, async (req, res) => {
+        app.get('/verify_product', async (req, res) => {
             const email = req.query.email;
-            if (email !== req.decode.email) {
-                return res.status(403).send({ message: "Forbiden Access" })
+            const query = {}
+            if (email) {
+                query.email = email;
             }
-            const query = {
-                email: req.decode.email
-            };
+            // if (email !== req.decode.email) {
+            //     return res.status(403).send({ message: "Forbiden Access" })
+            // }
+            // query.email =  req.decode.email
 
             const result = await productColl.find(query).toArray();
             res.send(result);
@@ -178,12 +158,12 @@ async function run() {
         })
 
         // JWT realted API 
-        app.post('/getToken', (req, res) => {
-            const user = req.body
-            const token = jwt.sign(user, process.env.SECRATE_KEY, { expiresIn: "1h" })
-            // console.log(token)
-            res.send({ token: token })
-        })
+        // app.post('/getToken', (req, res) => {
+        //     const user = req.body
+        //     const token = jwt.sign(user, process.env.SECRATE_KEY, { expiresIn: "1h" })
+        //     // console.log(token)
+        //     res.send({ token: token })
+        // })
 
         app.get('/bids/:productId', async (req, res) => {
             const productId = req.params.productId;
@@ -212,15 +192,15 @@ async function run() {
 
 
         // verify with coustome JWT token 
-        app.get('/bids', verifyJwtToken, async (req, res) => {
+        app.get('/bids', async (req, res) => {
             const email = req.query.email;
             const query = {}
             if (email) {
                 query.buyer_email = email
             };
-            if (email !== req.token_email) {
-                return res.status(403).send({ message: "forbiden access" })
-            }
+            // if (email !== req.token_email) {
+            //     return res.status(403).send({ message: "forbiden access" })
+            // }
             const cursor = bidsCollection.find(query);
             const result = await cursor.toArray();
             res.send(result)
