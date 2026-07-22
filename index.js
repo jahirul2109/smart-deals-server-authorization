@@ -13,8 +13,8 @@ const port = process.env.PORT || 4000;
 app.use(cors())
 app.use(express.json())
 
-
-const serviceAccount = require("./smart-deals-client-v1.json");
+const decodedFirebaseServiceKey = Buffer.from(process.env.FIREBASE_SERVICE_KEY, "base64").toString('utf8');
+const serviceAccount = JSON.parse(decodedFirebaseServiceKey);
 
 initializeApp({
     credential: cert(serviceAccount)
@@ -169,18 +169,31 @@ async function run() {
             res.send(result)
         })
 
-        // Get all product api 
+        //  search sepecific product
         app.get('/product', async (req, res) => {
-            // const projectFildes = {
-            //     title : 1, 
-            //     price_min : 1,
-            //     price_max : 1
-            // }
-            // const cursor = productColl.find().sort({price_min : -1}).limit(3).project(projectFildes).skip(2);
-            const cursor = productColl.find()
-            const result = await cursor.toArray();
+            const search = req.query.search;
+            const query = {};
+            if (search) {
+                query.title = {
+                    $regex: search,
+                    $option: 'i'
+                }
+            };
+            const result = await productColl.find(query).toArray();
             res.send(result)
         })
+        // Get all product api 
+        // app.get('/product', async (req, res) => {
+        //     // const projectFildes = {
+        //     //     title : 1, 
+        //     //     price_min : 1,
+        //     //     price_max : 1
+        //     // }
+        //     // const cursor = productColl.find().sort({price_min : -1}).limit(3).project(projectFildes).skip(2);
+        //     const cursor = productColl.find()
+        //     const result = await cursor.toArray();
+        //     res.send(result)
+        // })
 
         // JWT realted API 
         // app.post('/getToken', (req, res) => {
