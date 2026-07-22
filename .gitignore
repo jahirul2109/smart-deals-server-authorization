@@ -1,3 +1,4 @@
 node_modules
 smart-deals-client-v1.json
 .env
+.vercel

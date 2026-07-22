@@ -176,7 +176,7 @@ async function run() {
             if (search) {
                 query.title = {
                     $regex: search,
-                    $option: 'i'
+                    $options: 'i'
                 }
             };
             const result = await productColl.find(query).toArray();
