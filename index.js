@@ -3,8 +3,8 @@ const express = require('express')
 const cors = require('cors')
 const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const {initializeApp , cert} = require("firebase-admin");
-const admin = require("firebase-admin");
+const { initializeApp, cert } = require("firebase-admin");
+const { getAuth } = require("firebase-admin/auth")
 const port = process.env.PORT || 4000;
 
 // product_db
@@ -16,22 +16,29 @@ app.use(express.json())
 
 const serviceAccount = require("./smart-deals-client-v1.json");
 
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+initializeApp({
+    credential: cert(serviceAccount)
 });
 
 
-const verifyFirebaseToken = (req, res, next) => {
-    const authorization = req.headers.authorization;
-    if (!authorization) {
+const verifyFirebaseToken = async (req, res, next) => {
+    try {
+        const authorization = req.headers.authorization;
+        if (!authorization) {
+            return res.status(401).send({ message: "unauthorized access" })
+        }
+        const token = authorization.split(" ")[1];
+        if (!token) {
+            return res.status(401).send({ message: "unauthorized access" })
+        }
+        const decoded = await getAuth().verifyIdToken(token);
+        req.decoded = decoded;
+        next()
+    }
+    catch (error) {
+        console.log('token error:', error)
         return res.status(401).send({ message: "unauthorized access" })
     }
-    const token = authorization.split(" ")[1];
-    if (!token) {
-        return res.status(401).send({ message: "unauthorized access" })
-    }
-    next()
-
 }
 
 const uri = `mongodb+srv://${process.env.USER_ID}:${process.env.USER_PASS}@cluster0.b6s1ev2.mongodb.net/?appName=Cluster0`;
@@ -75,29 +82,47 @@ async function run() {
             res.send(result)
         })
         // Make Product api data
-        app.post('/product', async (req, res) => {
+        app.post('/product', verifyFirebaseToken, async (req, res) => {
             console.log("after usering authorizetion", req.headers)
             const newProduct = req.body;
+
+            if (newProduct.email !== req.decoded.email) {
+                return res.status(403).send({ message: "forbidden access" })
+            }
             newProduct.created_at = new Date();
             const result = await productColl.insertOne(newProduct)
             res.send(result)
         })
 
         // Only authoriz user can access 
-        app.get('/verify_product', async (req, res) => {
+
+        app.get('/verify_product', verifyFirebaseToken, async (req, res) => {
             const email = req.query.email;
             const query = {}
             if (email) {
                 query.email = email;
             }
-            // if (email !== req.decode.email) {
-            //     return res.status(403).send({ message: "Forbiden Access" })
-            // }
-            // query.email =  req.decode.email
-
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: "forbidden access" })
+            }
+            query.email = req.decoded.email;
             const result = await productColl.find(query).toArray();
-            res.send(result);
-        });
+            res.send(result)
+        })
+        // app.get('/verify_product', verifyFirebaseToken,async (req, res) => {
+        //     const email = req.query.email;
+        //     const query = {}
+        //     if (email) {
+        //         query.email = email;
+        //     }
+        //     // if (email !== req.decode.email) {
+        //     //     return res.status(403).send({ message: "Forbiden Access" })
+        //     // }
+        //     // query.email =  req.decode.email
+
+        //     const result = await productColl.find(query).toArray();
+        //     res.send(result);
+        // });
 
         // update product details
         app.patch('/product/:id', async (req, res) => {
