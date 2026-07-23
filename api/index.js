@@ -7,6 +7,8 @@ const admin = require("firebase-admin");
 const { getAuth } = require("firebase-admin/auth")
 const port = process.env.PORT || 4000;
 
+console.log("USER_ID:", process.env.USER_ID);
+console.log("USER_PASS:", process.env.USER_PASS ? "Found" : "Missing");
 
 
 
@@ -269,8 +271,10 @@ async function run() {
         console.log("✅ All routes registered");
     }
     catch (err) {
-        console.error("❌ Run Error:", err);
-    }
+    console.error("RUN ERROR FULL:", err);
+    console.error("MESSAGE:", err.message);
+    console.error("STACK:", err.stack);
+}
 }
 run()
 
