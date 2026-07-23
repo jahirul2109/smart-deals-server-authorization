@@ -1,304 +1,241 @@
-require('dotenv').config()
-const express = require('express')
-const cors = require('cors')
-const app = express();
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+require("dotenv").config();
+
+const express = require("express");
+const cors = require("cors");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+
 const admin = require("firebase-admin");
-const { getAuth } = require("firebase-admin/auth")
-const port = process.env.PORT || 4000;
+const { getAuth } =require("firebase-admin/auth");
 
-console.log("USER_ID:", process.env.USER_ID);
-console.log("USER_PASS:", process.env.USER_PASS ? "Found" : "Missing");
+const app = express();
 
+app.use(cors());
+app.use(express.json());
 
+const decodedFirebaseServiceKey = Buffer.from(
+  process.env.FIREBASE_SERVICE_KEY,
+  "base64"
+).toString("utf8");
 
-// product_db
-// bR9AuruIU1pq8oxl
-// Midlewear
-app.use(cors())
-app.use(express.json())
-
-const decodedFirebaseServiceKey = Buffer.from(process.env.FIREBASE_SERVICE_KEY, "base64").toString('utf8');
 const serviceAccount = JSON.parse(decodedFirebaseServiceKey);
 
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+  credential: admin.credential.cert(serviceAccount),
 });
-
-const verifyFirebaseToken = async (req, res, next) => {
-    try {
-        const authorization = req.headers.authorization;
-        if (!authorization) {
-            return res.status(401).send({ message: "unauthorized access" })
-        }
-        const token = authorization.split(" ")[1];
-        if (!token) {
-            return res.status(401).send({ message: "unauthorized access" })
-        }
-        const decoded = await getAuth().verifyIdToken(token);
-        req.decoded = decoded;
-        next()
-    }
-    catch (error) {
-        console.log('token error:', error)
-        return res.status(401).send({ message: "unauthorized access" })
-    }
-}
 
 const uri = `mongodb+srv://${process.env.USER_ID}:${process.env.USER_PASS}@cluster0.b6s1ev2.mongodb.net/?appName=Cluster0`;
+
 const client = new MongoClient(uri, {
-    serverApi: {
-        version: ServerApiVersion.v1,
-        strict: true,
-        deprecationErrors: true,
-    }
-})
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
 
-async function run() {
-    try {
-        console.log("🚀 Run function started");
-        await client.connect()
-        console.log("✅ MongoDB Connected");
-        const productDB = client.db('product_db');
-        console.log("✅ Database selected");
-        const productColl = productDB.collection('product_collection');
-        const bidsCollection = productDB.collection('bids')
-        const userCollection = productDB.collection('userCollection')
-        console.log("✅ Collections loaded");
+let productColl;
+let bidsCollection;
+let userCollection;
 
-        // Add new user
-        app.post('/user', async (req, res) => {
-            const newUser = req.body;
-            const email = newUser.email;
-            const query = { email: email }
-            const existinguser = await userCollection.findOne(query);
-            if (existinguser) {
-                res.send(JSON.stringify('User Already Existing'))
-            }
-            else {
-                // console.log('new user add', newUser)
-                const result = await userCollection.insertOne(newUser);
-                res.send(result)
-            }
-        })
+async function connectDB() {
+  if (productColl) return;
 
-        // get all user
-        app.get('/user', async (req, res) => {
-            const cursor = userCollection.find()
-            const result = await cursor.toArray()
-            res.send(result)
-        })
-        // Make Product api data
-        app.post('/product', verifyFirebaseToken, async (req, res) => {
-            console.log("after usering authorizetion", req.headers)
-            const newProduct = req.body;
+  await client.connect();
 
-            if (newProduct.email !== req.decoded.email) {
-                return res.status(403).send({ message: "forbidden access" })
-            }
-            newProduct.created_at = new Date();
-            const result = await productColl.insertOne(newProduct)
-            res.send(result)
-        })
+  const db = client.db("product_db");
 
-        // Only authoriz user can access 
+  productColl = db.collection("product_collection");
+  bidsCollection = db.collection("bids");
+  userCollection = db.collection("userCollection");
 
-        app.get('/verify_product', verifyFirebaseToken, async (req, res) => {
-            const email = req.query.email;
-            const query = {}
-            if (email) {
-                query.email = email;
-            }
-            if (email !== req.decoded.email) {
-                return res.status(403).send({ message: "forbidden access" })
-            }
-            query.email = req.decoded.email;
-            const result = await productColl.find(query).toArray();
-            res.send(result)
-        })
-        // app.get('/verify_product', verifyFirebaseToken,async (req, res) => {
-        //     const email = req.query.email;
-        //     const query = {}
-        //     if (email) {
-        //         query.email = email;
-        //     }
-        //     // if (email !== req.decode.email) {
-        //     //     return res.status(403).send({ message: "Forbiden Access" })
-        //     // }
-        //     // query.email =  req.decode.email
-
-        //     const result = await productColl.find(query).toArray();
-        //     res.send(result);
-        // });
-
-        // update product details
-        app.patch('/product/:id', async (req, res) => {
-            const id = req.params.id;
-            const product = req.body;
-            const qurey = {
-                _id: new ObjectId(id)
-            }
-            const updateProduct = {
-                $set: {
-                    name: product.name,
-                    price: product.price,
-                    quality: product.quality
-                }
-            }
-            const result = await productColl.updateOne(qurey, updateProduct);
-            res.send(result)
-        })
-
-        // get single product api 
-        app.get('/product/:productId', async (req, res) => {
-            const id = req.params.productId;
-            const qurey = {
-                _id: new ObjectId(id)
-            };
-            const result = await productColl.findOne(qurey);
-            res.send(result)
-        })
-
-        // Delete product 
-        app.delete('/product/:id', async (req, res) => {
-            const id = req.params.id;
-            const query = {
-                _id: new ObjectId(id)
-            };
-            const result = await productColl.deleteOne(query)
-            res.send(result)
-        })
-
-        // get recent product 
-        app.get('/recent-product', async (req, res) => {
-            const cursor = productColl.find().sort({ created_at: -1 }).limit(6);
-            const result = await cursor.toArray();
-            res.send(result)
-        })
-
-        //  search sepecific product
-        app.get('/product', async (req, res) => {
-            const search = req.query.search;
-            const query = {};
-            if (search) {
-                query.title = {
-                    $regex: search,
-                    $options: 'i'
-                }
-            };
-            const result = await productColl.find(query).toArray();
-            res.send(result)
-        })
-        // Get all product api 
-        // app.get('/product', async (req, res) => {
-        //     // const projectFildes = {
-        //     //     title : 1, 
-        //     //     price_min : 1,
-        //     //     price_max : 1
-        //     // }
-        //     // const cursor = productColl.find().sort({price_min : -1}).limit(3).project(projectFildes).skip(2);
-        //     const cursor = productColl.find()
-        //     const result = await cursor.toArray();
-        //     res.send(result)
-        // })
-
-        // JWT realted API 
-        // app.post('/getToken', (req, res) => {
-        //     const user = req.body
-        //     const token = jwt.sign(user, process.env.SECRATE_KEY, { expiresIn: "1h" })
-        //     // console.log(token)
-        //     res.send({ token: token })
-        // })
-
-        app.get('/bids/:productId', async (req, res) => {
-            const productId = req.params.productId;
-            const query = {
-                product: productId
-            };
-            const result = await bidsCollection.find(query).sort({ bid_price: 1 }).toArray();
-            res.send(result)
-        })
-        // // verify with firebase accessToken
-        // app.get('/bids', verifyJwtToken, async (req, res) => {
-        //     console.log(req.headers)
-        //     const email = req.query.email;
-        //     console.log('decode Email', req.decode.email)
-        //     if (email !== req.decode.email) {
-        //         return res.status(401).send({ message: "unauthorized access" });
-        //     }
-        //     const query = {
-        //         buyer_email: req.decode.email
-        //     };
-
-        //     const cursor = bidsCollection.find(query);
-        //     const reslt = await cursor.toArray();
-        //     res.send(reslt)
-        // })
-
-
-        // verify with coustome JWT token 
-        app.get('/bids', async (req, res) => {
-            const email = req.query.email;
-            const query = {}
-            if (email) {
-                query.buyer_email = email
-            };
-            // if (email !== req.token_email) {
-            //     return res.status(403).send({ message: "forbiden access" })
-            // }
-            const cursor = bidsCollection.find(query);
-            const result = await cursor.toArray();
-            res.send(result)
-        })
-
-        // Remove Bids form list
-        app.delete('/bids/:id', async (req, res) => {
-            const id = req.params.id;
-            const query = {
-                _id: new ObjectId(id)
-            }
-            const result = await bidsCollection.deleteOne(query)
-            res.send(result)
-        })
-        // app.get('')
-        // add new bids
-        app.post('/bids', async (req, res) => {
-            const newBids = req.body;
-            const result = await bidsCollection.insertOne(newBids);
-            // console.log(newBids)
-            res.send(result)
-        })
-        console.log("✅ All routes registered");
-    }
-    catch (err) {
-    console.error("RUN ERROR FULL:", err);
-    console.error("MESSAGE:", err.message);
-    console.error("STACK:", err.stack);
+  console.log("Mongo Connected");
 }
-}
-run()
 
-// client.connect()
-// .then(()=> {
-//     console.log('MongoDB connected')
-//     app.listen(port, () => {
-//     console.log("Server is connecting on port", port)
-// })
-// })
-// .catch((err)=> console.log(err))
+const verifyFirebaseToken = async (req, res, next) => {
+  try {
+    const authorization = req.headers.authorization;
+
+    if (!authorization) {
+      return res.status(401).send({ message: "Unauthorized" });
+    }
+
+    const token = authorization.split(" ")[1];
+
+    const decoded = await getAuth().verifyIdToken(token);
+
+    req.decoded = decoded;
+
+    next();
+  } catch (err) {
+    console.log(err);
+    res.status(401).send({ message: "Unauthorized" });
+  }
+};
+
+// middleware
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
 
 app.get("/", (req, res) => {
-    res.send({
-        message: "Hello World",
-        nodeEnv: process.env.NODE_ENV,
-        userId: process.env.USER_ID,
-        userPass: process.env.USER_PASS ? "Found" : "Missing"
-    });
+  res.send({
+    message: "Hello World",
+    mongo: "Connected",
+  });
 });
-if (process.env.NODE_ENV !== "production") {
-    app.listen(port, () => {
-        console.log(`Server running on ${port}`);
+
+// user
+
+app.post("/user", async (req, res) => {
+  const newUser = req.body;
+
+  const exist = await userCollection.findOne({
+    email: newUser.email,
+  });
+
+  if (exist) {
+    return res.send("User Already Exists");
+  }
+
+  const result = await userCollection.insertOne(newUser);
+
+  res.send(result);
+});
+
+app.get("/user", async (req, res) => {
+  const result = await userCollection.find().toArray();
+
+  res.send(result);
+});
+
+// products
+
+app.post("/product", verifyFirebaseToken, async (req, res) => {
+  const product = req.body;
+
+  if (product.email !== req.decoded.email) {
+    return res.status(403).send({
+      message: "Forbidden",
     });
-}
+  }
+
+  product.created_at = new Date();
+
+  const result = await productColl.insertOne(product);
+
+  res.send(result);
+});
+
+app.get("/product", async (req, res) => {
+  const search = req.query.search;
+
+  const query = {};
+
+  if (search) {
+    query.title = {
+      $regex: search,
+      $options: "i",
+    };
+  }
+
+  const result = await productColl.find(query).toArray();
+
+  res.send(result);
+});
+
+app.get("/product/:id", async (req, res) => {
+  const result = await productColl.findOne({
+    _id: new ObjectId(req.params.id),
+  });
+
+  res.send(result);
+});
+
+app.delete("/product/:id", async (req, res) => {
+  const result = await productColl.deleteOne({
+    _id: new ObjectId(req.params.id),
+  });
+
+  res.send(result);
+});
+
+app.patch("/product/:id", async (req, res) => {
+  const result = await productColl.updateOne(
+    {
+      _id: new ObjectId(req.params.id),
+    },
+    {
+      $set: req.body,
+    }
+  );
+
+  res.send(result);
+});
+
+app.get("/recent-product", async (req, res) => {
+  const result = await productColl
+    .find()
+    .sort({ created_at: -1 })
+    .limit(6)
+    .toArray();
+
+  res.send(result);
+});
+
+app.get("/verify_product", verifyFirebaseToken, async (req, res) => {
+  if (req.query.email !== req.decoded.email) {
+    return res.status(403).send({
+      message: "Forbidden",
+    });
+  }
+
+  const result = await productColl
+    .find({
+      email: req.decoded.email,
+    })
+    .toArray();
+
+  res.send(result);
+});
+
+// bids
+
+app.post("/bids", async (req, res) => {
+  const result = await bidsCollection.insertOne(req.body);
+
+  res.send(result);
+});
+
+app.get("/bids", async (req, res) => {
+  const query = {};
+
+  if (req.query.email) {
+    query.buyer_email = req.query.email;
+  }
+
+  const result = await bidsCollection.find(query).toArray();
+
+  res.send(result);
+});
+
+app.get("/bids/:productId", async (req, res) => {
+  const result = await bidsCollection
+    .find({
+      product: req.params.productId,
+    })
+    .sort({ bid_price: 1 })
+    .toArray();
+
+  res.send(result);
+});
+
+app.delete("/bids/:id", async (req, res) => {
+  const result = await bidsCollection.deleteOne({
+    _id: new ObjectId(req.params.id),
+  });
+
+  res.send(result);
+});
 
 module.exports = app;
