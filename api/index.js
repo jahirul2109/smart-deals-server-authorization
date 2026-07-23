@@ -280,6 +280,10 @@ run().catch(console.dir)
 app.get('/', (req, res) => {
     res.send('Hello world');
 })
-app.listen(port, () => {
-    console.log("Server is connecting on port", port)
-})
+if (process.env.NODE_ENV !== "production") {
+    app.listen(port, () => {
+        console.log(`Server running on ${port}`);
+    });
+}
+
+module.exports = app;
