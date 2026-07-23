@@ -287,9 +287,14 @@ run()
 // })
 // .catch((err)=> console.log(err))
 
-app.get('/', (req, res) => {
-    res.send('Hello world');
-})
+app.get("/", (req, res) => {
+    res.send({
+        message: "Hello World",
+        nodeEnv: process.env.NODE_ENV,
+        userId: process.env.USER_ID,
+        userPass: process.env.USER_PASS ? "Found" : "Missing"
+    });
+});
 if (process.env.NODE_ENV !== "production") {
     app.listen(port, () => {
         console.log(`Server running on ${port}`);
