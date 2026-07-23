@@ -3,9 +3,12 @@ const express = require('express')
 const cors = require('cors')
 const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const { initializeApp, cert } = require("firebase-admin");
+const admin = require("firebase-admin");
 const { getAuth } = require("firebase-admin/auth")
 const port = process.env.PORT || 4000;
+
+
+
 
 // product_db
 // bR9AuruIU1pq8oxl
@@ -16,10 +19,9 @@ app.use(express.json())
 const decodedFirebaseServiceKey = Buffer.from(process.env.FIREBASE_SERVICE_KEY, "base64").toString('utf8');
 const serviceAccount = JSON.parse(decodedFirebaseServiceKey);
 
-initializeApp({
-    credential: cert(serviceAccount)
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
 });
-
 
 const verifyFirebaseToken = async (req, res, next) => {
     try {
