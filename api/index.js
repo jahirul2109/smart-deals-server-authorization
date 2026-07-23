@@ -173,7 +173,7 @@ app.patch("/product/:id", async (req, res) => {
   res.send(result);
 });
 
-app.get("/recent-product", async (req, res) => {
+app.get("/recent_product", async (req, res) => {
   const result = await productColl
     .find()
     .sort({ created_at: -1 })
