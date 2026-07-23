@@ -54,12 +54,15 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
+        console.log("🚀 Run function started");
         await client.connect()
+        console.log("✅ MongoDB Connected");
         const productDB = client.db('product_db');
+        console.log("✅ Database selected");
         const productColl = productDB.collection('product_collection');
         const bidsCollection = productDB.collection('bids')
         const userCollection = productDB.collection('userCollection')
-
+        console.log("✅ Collections loaded");
 
         // Add new user
         app.post('/user', async (req, res) => {
@@ -263,12 +266,13 @@ async function run() {
             // console.log(newBids)
             res.send(result)
         })
+        console.log("✅ All routes registered");
     }
-    finally {
-
+    catch (err) {
+        console.error("❌ Run Error:", err);
     }
 }
-run().catch(console.dir)
+run()
 
 // client.connect()
 // .then(()=> {
